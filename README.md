@@ -60,7 +60,21 @@ camera frame (≤960 px)
    - Exposure metered on the face (Android Chrome `pointsOfInterest` + `exposureCompensation`).
    - On-screen hints: `BACKLIT`, `TOO DARK`, `GLARE`, `HAZY`, `BLURRY`, `MOVE CLOSER`. The thresholds are
      calibrated on the test set (`LIGHT` in `src/vision.ts`).
-6. **Navigation.** The card closes with ✕, a swipe down, the Back button, or the phone's back gesture.
+6. **Any phone orientation.** The models only handle roughly upright faces (measured: 100% up to 30° of
+   tilt, 92% at 45°, 48% sideways, 0% upside down). So each frame is rotated by 0/90/180/270° before
+   detection, keeping faces within 45° of upright:
+   - A sideways face shows its tilt through its eye/mouth landmarks, and the frame turns to match within 2 frames.
+   - If no face is found, or a face won't identify, alternate rotations are probed in the background,
+     sideways first. A switch needs a recognised founder or a clean upright face. This covers a phone
+     held upside down, where the landmarks give no signal.
+   - Rotating mid-session resets tracking. A watchdog resumes or restarts the camera if the phone pauses it.
+   - Photo scans try all four rotations.
+   - Rotated non-founder faces: 0 false accepts in 1,155 reads (max similarity 0.402).
+7. **Layout follows the phone.** Portrait uses a bottom sheet and landscape a side panel. The card
+   opens on the side away from the face and moves if the face ends up under it. The face's label
+   never sits under the card. The intro scrolls instead of clipping on short screens, and notch
+   insets are respected.
+8. **Navigation.** The card closes with ✕, a swipe, the Back button, or the phone's back gesture.
    The next back goes home and stops the camera. Implemented with the History API.
 
 ## Measured accuracy (held-out photos, not the enrollment headshots)
@@ -142,8 +156,9 @@ node scripts/insight_describe.mjs             # embeddings for all test photos
 node scripts/evaluate_insight.mjs             # accuracy table (uses data/labels.json)
 node scripts/robustness.mjs 500 base,rescue   # field conditions
 npx vite preview --port 4173 &
-node scripts/e2e_live.mjs <dir> <id>=<image> ...   # live camera path via a fake webcam (PHONE=1, BASE=url)
+node scripts/e2e_live.mjs <dir> <id>=<image> ...   # live camera path via a fake webcam (PHONE=1 | LANDSCAPE=1, BASE=url)
 node scripts/e2e_nav.mjs <dir> <face-image>        # every way out of a locked card
+node scripts/e2e_rotate.mjs <dir> <face-image>     # landscape start + portrait<->landscape mid-lock
 ```
 
 ## Deploy

@@ -4,7 +4,7 @@ import '@fontsource/inter/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/700.css';
 import './styles.css';
-import { loadVision, Tracker, lightingHint, type Vision, type Track, type Person, type RGBA } from './vision';
+import { loadVision, Tracker, lightingHint, type Vision, type Track, type Person, type RGBA, type Face } from './vision';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const stage = $('stage'), video = $<HTMLVideoElement>('video'), still = $<HTMLImageElement>('still');
@@ -160,6 +160,7 @@ async function startCamera(): Promise<boolean> {
   still.hidden = true; video.hidden = false;
   $('btn-live').hidden = true; $('btn-flip').hidden = false;
   tracker.reset(); dropCard();
+  frameRot = 0; orient.dims = ''; orient.tiltVotes = 0; orient.lastFaceAt = performance.now();
   mode = 'live';
   setStatus('scanning');
   requestAnimationFrame(liveLoop);
@@ -174,17 +175,102 @@ function stopCamera() {
 $('btn-flip').addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startCamera(); });
 $('btn-live').addEventListener('click', () => startCamera());
 
+/* ── rotation ──────────────────────────────────────────────────────────────
+   The face models only work on roughly upright faces (measured: 100% to 30° of tilt, 92% at 45°,
+   48% sideways, 0% upside down). So each frame is rotated by `rot` (0/90/180/270, clockwise)
+   before detection, keeping every face within 45° of upright whatever way the phone is held.
+   Boxes come back in rotated-frame pixels and are mapped back to the source for drawing. */
+
+type Rot = 0 | 90 | 180 | 270;
+/** How the processed frame relates to the source: rotation, scaled-source size, original size. */
+type Geo = { rot: Rot; SW: number; SH: number; srcW: number; srcH: number };
+let geo: Geo = { rot: 0, SW: 1, SH: 1, srcW: 1, srcH: 1 };
+const norm = (r: number) => (((Math.round(r / 90) * 90) % 360) + 360) % 360 as Rot;
+
 let sceneLuma = 128;
-function grab(src: CanvasImageSource, w: number, h: number, maxSide: number): RGBA {
+function grab(src: CanvasImageSource, w: number, h: number, maxSide: number, rot: Rot = 0): { img: RGBA; g: Geo } {
   const s = Math.min(1, maxSide / Math.max(w, h));
-  frame.width = Math.round(w * s); frame.height = Math.round(h * s);
-  fctx.drawImage(src, 0, 0, frame.width, frame.height);
+  const SW = Math.round(w * s), SH = Math.round(h * s);
+  const swap = rot === 90 || rot === 270;
+  frame.width = swap ? SH : SW; frame.height = swap ? SW : SH;
+  // x' = a·x + c·y + e,  y' = b·x + d·y + f
+  if (rot === 90) fctx.setTransform(0, 1, -1, 0, SH, 0);
+  else if (rot === 180) fctx.setTransform(-1, 0, 0, -1, SW, SH);
+  else if (rot === 270) fctx.setTransform(0, -1, 1, 0, 0, SW);
+  else fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.drawImage(src, 0, 0, SW, SH);
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
   const d = fctx.getImageData(0, 0, frame.width, frame.height);
   let sum = 0, n = 0;
   for (let i = 0; i < d.data.length; i += 4 * 97) { sum += d.data[i] * 0.299 + d.data[i + 1] * 0.587 + d.data[i + 2] * 0.114; n++; }
   sceneLuma = sum / n;
-  return { data: d.data, width: d.width, height: d.height, channels: 4 };
+  return { img: { data: d.data, width: d.width, height: d.height, channels: 4 }, g: { rot, SW, SH, srcW: w, srcH: h } };
 }
+
+/** Box in processed (rotated) frame pixels -> box in scaled-source pixels. */
+function unrotate(b: number[], g: Geo): [number, number, number, number] {
+  const back = ([px, py]: number[]) =>
+    g.rot === 90 ? [py, g.SH - px] : g.rot === 180 ? [g.SW - px, g.SH - py] : g.rot === 270 ? [g.SW - py, px] : [px, py];
+  const a = back([b[0], b[1]]), c = back([b[0] + b[2], b[1] + b[3]]);
+  const x = Math.min(a[0], c[0]), y = Math.min(a[1], c[1]);
+  return [x, y, Math.abs(c[0] - a[0]), Math.abs(c[1] - a[1])];
+}
+
+/** Clockwise tilt of a face in its frame, from the landmarks (mouth -> eyes). 0 = upright. */
+function faceRoll(f: Face): number {
+  const k = f.kps;
+  const ex = (k[0][0] + k[1][0]) / 2, ey = (k[0][1] + k[1][1]) / 2, mx = (k[3][0] + k[4][0]) / 2, my = (k[3][1] + k[4][1]) / 2;
+  const a = (Math.atan2(ey - my, ex - mx) * 180) / Math.PI + 90;
+  return ((a + 540) % 360) - 180;
+}
+
+// live orientation state
+let frameRot: Rot = 0;
+const orient = { tiltTo: 0 as Rot, tiltVotes: 0, lastProbe: 0, probeIdx: 0, lastFaceAt: 0, dims: '' };
+function setRot(r: Rot) {
+  if (r === frameRot) return;
+  frameRot = r;
+  tracker.reset();
+  orient.tiltVotes = 0; orient.probeIdx = 0;
+}
+
+/**
+ * When the current rotation isn't working -- no face found, or a face that won't identify --
+ * test one alternate rotation every ~0.5 s in the background (normal tracking keeps running, so
+ * nothing flickers). Switch only on hard evidence: a recognised founder, or a clean upright face.
+ */
+async function probeRotation(now: number) {
+  if (!vision || now - orient.lastProbe < 500) return;
+  const big = tracker.tracks.filter((t) => t.seen === now).sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])[0];
+  const noFace = !big && now - orient.lastFaceAt > 700;
+  const stuck = big && !tracker.tracks.some((t) => t.lock) && big.votes.length >= 5 && big.votes.every((v) => v === null);
+  if (!noFace && !stuck) return;
+  orient.lastProbe = now;
+  // sideways first (rotation lock + phone held landscape is the common case, upside down the rare
+  // one); with no face in view both sideways rotations are tried in the same pass
+  const order: number[][] = noFace ? [[90, 270], [180]] : [[90], [270], [180]];
+  for (const step of order[orient.probeIdx++ % order.length]) {
+    const r = norm(frameRot + step);
+    const { img } = grab(video, video.videoWidth, video.videoHeight, 960, r);
+    const f = (await vision.engine.detect(img, { size: detSize, threshold: 0.55 }))
+      .filter((d) => d.box[2] >= 28).sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])[0];
+    if (!f) continue;
+    if (stuck) {
+      const { m } = await vision.identify(img, f);
+      if (m.best.sim >= vision.threshold) return setRot(r);
+    } else if (Math.abs(faceRoll(f)) < 30 && f.score >= 0.7) return setRot(r);
+  }
+}
+
+/** Something about the stream changed (rotation, resize): old boxes are in the wrong place. */
+function onReorient() {
+  if (mode !== 'live') return;
+  tracker?.reset();
+  if (video.paused) video.play().catch(() => {});
+}
+screen.orientation?.addEventListener?.('change', onReorient);
+addEventListener('orientationchange', onReorient);
+addEventListener('resize', () => { if (mode === 'live') tracker?.tracks.forEach((t) => { t.view = [...t.box]; }); });
 
 /* ── exposure on the face (Android Chrome exposes these; elsewhere this silently does nothing) ── */
 const exposure = { at: 0, comp: 0, ok: true };
@@ -196,7 +282,10 @@ async function meterOnFace(t: Track | undefined, now: number) {
   const supported: any = navigator.mediaDevices.getSupportedConstraints?.() ?? {};
   const adv: any = {};
   if (t) {
-    if (supported.pointsOfInterest) adv.pointsOfInterest = [{ x: (t.box[0] + t.box[2] / 2) / frame.width, y: (t.box[1] + t.box[3] / 2) / frame.height }];
+    if (supported.pointsOfInterest) {
+      const [x, y, w, h] = unrotate(t.box, geo);
+      adv.pointsOfInterest = [{ x: (x + w / 2) / geo.SW, y: (y + h / 2) / geo.SH }];
+    }
     // nudge compensation so the face, not the sky, is correctly exposed
     if (caps.exposureCompensation && t.q) {
       const { min, max, step } = caps.exposureCompensation;
@@ -216,16 +305,37 @@ async function meterOnFace(t: Track | undefined, now: number) {
 let busy = false;
 async function liveLoop() {
   if (mode !== 'live' || !vision) return;
+  // watchdog: some phones pause the video or end the track when rotated
+  const vt = stream?.getVideoTracks()[0];
+  if (vt && vt.readyState === 'ended') { startCamera(); return; }
+  if (video.paused && !document.hidden) video.play().catch(() => {});
   if (!busy && video.readyState >= 2 && video.videoWidth) {
     busy = true;
     try {
-      const img = grab(video, video.videoWidth, video.videoHeight, 960);
+      const dims = `${video.videoWidth}x${video.videoHeight}`;
+      if (dims !== orient.dims) { // stream rotated with the screen: start over upright
+        orient.dims = dims; frameRot = 0; tracker.reset(); orient.tiltVotes = 0;
+      }
+      const { img, g } = grab(video, video.videoWidth, video.videoHeight, 960, frameRot);
       const now = performance.now();
-      const faces = await vision.engine.detect(img, { size: detSize, threshold: 0.55 });
+      const faces = (await vision.engine.detect(img, { size: detSize, threshold: 0.55 })).filter((f) => f.box[2] >= 28);
       const dt = performance.now() - now;
       detAvg = detAvg ? detAvg * 0.9 + dt * 0.1 : dt;
       if (detAvg > 150 && detSize > 320) { detSize = 320; detAvg = 0; }
-      tracker.update(faces.filter((f) => f.box[2] >= 28), now);
+      geo = g;
+      // a sideways/tilted face reveals its tilt through its landmarks: rotate the frame to match
+      const lead = [...faces].sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])[0];
+      if (lead) {
+        orient.lastFaceAt = now;
+        const roll = faceRoll(lead);
+        if (Math.abs(roll) >= 50) {
+          const target = norm(frameRot - roll);
+          orient.tiltVotes = target === orient.tiltTo ? orient.tiltVotes + 1 : 1;
+          orient.tiltTo = target;
+          if (orient.tiltVotes >= 2) { setRot(target); busy = false; requestAnimationFrame(liveLoop); return; }
+        } else orient.tiltVotes = 0;
+      }
+      tracker.update(faces, now);
       for (const t of tracker.due(now)) {
         const { m, q } = await vision.identify(img, t.face);
         t.q = q; t.hint = lightingHint(q, sceneLuma, t.box[2]);
@@ -234,6 +344,7 @@ async function liveLoop() {
       const biggest = [...tracker.tracks].sort((a, b) => b.box[2] * b.box[3] - a.box[2] * a.box[3])[0];
       meterOnFace(tracker.tracks.find((t) => t.key === selectedKey) ?? biggest, now);
       refreshCard(now);
+      await probeRotation(now);
     } catch (e) {
       console.error(e);
     }
@@ -257,23 +368,32 @@ async function scanPhoto(file: File) {
   stage.classList.remove('mirror'); mirrored = false;
   $('btn-live').hidden = false; $('btn-flip').hidden = true;
   tracker.reset(); dropCard();
-  const img = grab(still, still.naturalWidth, still.naturalHeight, 1600);
   const now = performance.now();
-  const faces = await vision.engine.detect(img, { size: 640, threshold: 0.5 });
-  tracker.update(faces.filter((f) => f.box[2] >= 20), now);
-  for (const t of tracker.tracks) {
-    const { m, q } = await vision.identify(img, t.face);
-    t.q = q; t.hint = lightingHint(q, sceneLuma, t.box[2]);
-    tracker.identifyOnce(t, m, now);
+  // A photo can be sideways or upside down: try upright first, then the other three rotations,
+  // and keep whichever recognises the most people (ties -> higher similarity).
+  let best: { tr: Tracker; g: Geo; score: number } | null = null;
+  for (const rot of [0, 90, 270, 180] as Rot[]) {
+    const { img, g } = grab(still, still.naturalWidth, still.naturalHeight, 1600, rot);
+    const faces = (await vision.engine.detect(img, { size: 640, threshold: 0.5 })).filter((f) => f.box[2] >= 20);
+    const tr = new Tracker(vision.threshold);
+    tr.update(faces, now);
+    for (const t of tr.tracks) {
+      const { m, q } = await vision.identify(img, t.face);
+      t.q = q; t.hint = lightingHint(q, sceneLuma, t.box[2]);
+      tr.identifyOnce(t, m, now);
+      t.seen = Infinity; // freeze: tracks stay alive in photo mode
+    }
+    const locks = tr.tracks.filter((t) => t.lock);
+    const upright = tr.tracks.filter((t) => Math.abs(faceRoll(t.face)) < 30).length;
+    const score = locks.length * 10 + locks.reduce((a, t) => a + t.lock!.sim, 0) + upright * 0.01;
+    if (!best || score > best.score) best = { tr, g, score };
+    if (rot === 0 && locks.length && locks.every((t) => Math.abs(faceRoll(t.face)) < 30)) break; // upright and recognised
   }
-  // freeze: keep tracks alive in photo mode
-  for (const t of tracker.tracks) t.seen = Infinity;
-  photoScale = still.naturalWidth / img.width;
+  tracker = best!.tr; geo = best!.g;
   refreshCard(now);
   if (!tracker.tracks.length) setStatus('no face found');
   else if (!tracker.tracks.some((t) => t.lock)) setStatus('no match');
 }
-let photoScale = 1;
 
 for (const id of ['file', 'file-intro']) {
   $<HTMLInputElement>(id).addEventListener('change', (e) => {
@@ -310,7 +430,36 @@ function refreshCard(now: number) {
   } else if (cardPerson && mode === 'photo') closeCard();
 }
 
+/* ── keep the card off the face it describes ─────────────────────────────
+   Portrait phones: sheet at the bottom or top. Landscape/desktop: panel on the right or left.
+   Chosen away from the face when the card opens; flips if the face sits under it for 0.5 s. */
+const portraitPhone = matchMedia('(max-width: 720px) and (orientation: portrait)');
+let side: 'bottom' | 'top' | 'right' | 'left' = 'right';
+let coveredSince = 0;
+function sideAwayFrom(t: Track | null) {
+  const vertical = portraitPhone.matches;
+  if (!t) return vertical ? 'bottom' : 'right';
+  const [x, y, w, h] = toScreen(t.view);
+  if (vertical) return y + h / 2 > hud.clientHeight * 0.55 ? 'top' : 'bottom';
+  return x + w / 2 > hud.clientWidth * 0.55 ? 'left' : 'right';
+}
+function setSide(s2: typeof side) { side = s2; document.body.dataset.side = s2; }
+function keepCardClear(now: number) {
+  const t = pickTrack();
+  if (!cardPerson || card.hidden || !t) { coveredSince = 0; return; }
+  const [x, y, w, h] = toScreen(t.view);
+  const c = card.getBoundingClientRect();
+  const ix = Math.max(0, Math.min(x + w, c.right) - Math.max(x, c.left));
+  const iy = Math.max(0, Math.min(y + h, c.bottom) - Math.max(y, c.top));
+  if ((ix * iy) / Math.max(1, w * h) > 0.35) {
+    if (!coveredSince) coveredSince = now;
+    else if (now - coveredSince > 500) { setSide(sideAwayFrom(t)); coveredSince = 0; }
+  } else coveredSince = 0;
+}
+portraitPhone.addEventListener?.('change', () => setSide(sideAwayFrom(pickTrack())));
+
 function showCard(p: Person) {
+  if (!cardPerson) setSide(sideAwayFrom(pickTrack()));
   if (history.state?.fl === 'scan') history.pushState({ fl: 'card' }, '');
   cardPerson = p.id;
   card.style.transform = '';
@@ -351,8 +500,9 @@ let dragY: number | null = null, dragDy = 0;
 card.addEventListener('touchstart', (e) => { if (card.scrollTop <= 0) { dragY = e.touches[0].clientY; dragDy = 0; card.classList.remove('snap'); } }, { passive: true });
 card.addEventListener('touchmove', (e) => {
   if (dragY === null) return;
-  dragDy = Math.max(0, e.touches[0].clientY - dragY);
-  if (dragDy > 6) { card.classList.add('dragging'); card.style.transform = `translateY(${dragDy}px)`; }
+  const dir = side === 'top' ? -1 : 1; // swipe toward the edge the card lives on
+  dragDy = Math.max(0, dir * (e.touches[0].clientY - dragY));
+  if (dragDy > 6) { card.classList.add('dragging'); card.style.transform = `translateY(${dir * dragDy}px)`; }
 }, { passive: true });
 card.addEventListener('touchend', () => {
   if (dragY === null) return;
@@ -369,15 +519,17 @@ function setStatus(s: string) {
 /* ── HUD ───────────────────────────────────────────────────────────────── */
 
 /** frame-pixel box -> screen-pixel box, honouring object-fit and mirroring */
+/** processed-frame box -> screen box: undo the frame rotation, then object-fit + mirroring */
 function toScreen(b: number[]): [number, number, number, number] {
   const W = hud.clientWidth, H = hud.clientHeight;
-  let sw: number, sh: number, fit: 'cover' | 'contain', k: number;
-  if (mode === 'photo') { sw = still.naturalWidth; sh = still.naturalHeight; fit = 'contain'; k = photoScale; }
-  else { sw = video.videoWidth; sh = video.videoHeight; fit = 'cover'; k = sw / frame.width; }
-  const s = fit === 'cover' ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh);
+  const sw = mode === 'photo' ? still.naturalWidth : video.videoWidth || geo.srcW;
+  const sh = mode === 'photo' ? still.naturalHeight : video.videoHeight || geo.srcH;
+  const k = sw / geo.SW;
+  const s = mode === 'photo' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh);
   const ox = (W - sw * s) / 2, oy = (H - sh * s) / 2;
-  let x = ox + b[0] * k * s;
-  const y = oy + b[1] * k * s, w = b[2] * k * s, h = b[3] * k * s;
+  const [bx, by, bw, bh] = unrotate(b, geo);
+  let x = ox + bx * k * s;
+  const y = oy + by * k * s, w = bw * k * s, h = bh * k * s;
   if (mirrored) x = W - x - w;
   return [x, y, w, h];
 }
@@ -401,13 +553,23 @@ function chip(text: string, x: number, y: number, bg: string, fg: string, below:
   const tw = ctx.measureText(text).width;
   const W = hud.clientWidth;
   if (y - 22 < TOPBAR() + 4) y = Math.min(below, TOPBAR() + 30); // tuck inside the box, under the top bar
-  const cx = Math.max(6, Math.min(W - tw - 22, x));
+  let cx = Math.max(6, Math.min(W - tw - 22, x));
+  // never draw the label under the card
+  const c = cardRect;
+  if (c && cx < c.right && cx + tw + 16 > c.left && y - 23 < c.bottom && y - 1 > c.top) {
+    if (side === 'right') cx = Math.max(6, c.left - tw - 22);
+    else if (side === 'left') cx = Math.min(W - tw - 22, c.right + 6);
+    else if (side === 'top') y = Math.max(y, c.bottom + 26);
+    else y = Math.min(y, c.top - 4);
+  }
   ctx.fillStyle = bg;
   ctx.beginPath(); ctx.roundRect(cx, y - 23, tw + 16, 22, 6); ctx.fill();
   ctx.fillStyle = fg; ctx.textBaseline = 'middle'; ctx.fillText(text, cx + 8, y - 12);
 }
 
+let cardRect: DOMRect | null = null;
 function draw(now: number) {
+  cardRect = cardPerson && !card.hidden ? card.getBoundingClientRect() : null;
   const dpr = Math.min(2, devicePixelRatio || 1);
   const W = hud.clientWidth, H = hud.clientHeight;
   if (hud.width !== Math.round(W * dpr) || hud.height !== Math.round(H * dpr)) { hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr); }
@@ -457,9 +619,17 @@ function draw(now: number) {
       }
     }
   }
+  keepCardClear(now);
   requestAnimationFrame(draw);
 }
 requestAnimationFrame(draw);
+
+// read-only hook for the headless tests (scripts/e2e_rotate.mjs)
+(window as any).__fl = () => {
+  const t = pickTrack();
+  const c = card.getBoundingClientRect();
+  return { face: t ? toScreen(t.view) : null, card: card.hidden ? null : [c.left, c.top, c.width, c.height], side, rot: frameRot, locked: t?.lock?.id ?? null };
+};
 
 // tap a reticle to pull up that person's card
 hud.addEventListener('click', (e) => {
