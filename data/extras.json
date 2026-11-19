@@ -1,0 +1,25 @@
+[
+  {
+    "id": "swapneel-premchand",
+    "name": "Swapneel Premchand",
+    "group": "leap",
+    "role": "Founder, Tulips.edu",
+    "education": "BTech, CS + AI (Plaksha University)",
+    "bio": [
+      "CS + AI student at Plaksha University running production software before finishing college. Founded Tulips.edu, a school ERP live in three schools, and works as the sole engineer in Flyback's Founder's Office.",
+      "Hack-n-Win 3.0: 1st of 450. Plaksha Medithon: 2nd. Onboarded 300+ students to AWS as a campus ambassador."
+    ],
+    "links": [
+      { "label": "swapneel.dev", "url": "https://www.swapneel.dev" },
+      { "label": "GitHub", "url": "https://github.com/Sw4ppleneel" },
+      { "label": "LinkedIn", "url": "https://www.linkedin.com/in/swapneel-premchand-b35082360/" }
+    ],
+    "cardPhoto": "data/swapneel/github_avatar.img",
+    "sources": [
+      { "file": "data/swapneel/github_avatar.img", "face": 0, "mirror": true, "from": "https://avatars.githubusercontent.com/u/215304245" },
+      { "file": "data/swapneel/medithon-cheque.img", "face": 0, "from": "https://www.swapneel.dev/assets/photos/medithon-cheque.webp" },
+      { "file": "data/swapneel/dharamshala-fence.img", "face": 0, "from": "https://www.swapneel.dev/assets/photos/dharamshala-fence.webp" },
+      { "file": "data/swapneel/spiti-husky.img", "face": 0, "from": "https://www.swapneel.dev/assets/photos/spiti-husky.webp" }
+    ]
+  }
+]

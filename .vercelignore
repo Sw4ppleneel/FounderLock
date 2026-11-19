@@ -1,0 +1,7 @@
+# Only the site ships. Scraped/test photos, enrollment sources and tooling stay local.
+# Root-anchored: public/data (the gallery) must still upload.
+/data
+/scripts
+/dist
+/node_modules
+/README.md

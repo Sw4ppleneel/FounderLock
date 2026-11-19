@@ -1,0 +1,17 @@
+node_modules
+dist
+.vercel
+# test material: scraped web photos and their embeddings stay local
+data/web
+data/impostors
+data/impostors_web
+data/insight_test.json
+data/eval_cases_insight.json
+.DS_Store
+__pycache__/
+# Swapneel's downloaded site photos: only the 4 used as enrollment sources are committed
+data/swapneel/*
+!data/swapneel/github_avatar.img
+!data/swapneel/medithon-cheque.img
+!data/swapneel/dharamshala-fence.img
+!data/swapneel/spiti-husky.img

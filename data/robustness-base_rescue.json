@@ -1,0 +1,56 @@
+[
+ {
+  "condition": "clean",
+  "variant": "base",
+  "detected": "365/368",
+  "recognised": "359/368",
+  "recall": 0.976,
+  "wrongFounder": 0,
+  "falseAccept": "0/500"
+ },
+ {
+  "condition": "clean",
+  "variant": "rescue",
+  "detected": "365/368",
+  "recognised": "359/368",
+  "recall": 0.976,
+  "wrongFounder": 0,
+  "falseAccept": "0/500"
+ },
+ {
+  "condition": "harsh sun / overexposed",
+  "variant": "base",
+  "detected": "365/368",
+  "recognised": "334/368",
+  "recall": 0.908,
+  "wrongFounder": 0,
+  "falseAccept": "0/500"
+ },
+ {
+  "condition": "harsh sun / overexposed",
+  "variant": "rescue",
+  "detected": "365/368",
+  "recognised": "334/368",
+  "recall": 0.908,
+  "wrongFounder": 0,
+  "falseAccept": "0/500"
+ },
+ {
+  "condition": "heavy dust haze",
+  "variant": "base",
+  "detected": "361/368",
+  "recognised": "321/368",
+  "recall": 0.872,
+  "wrongFounder": 0,
+  "falseAccept": "0/500"
+ },
+ {
+  "condition": "heavy dust haze",
+  "variant": "rescue",
+  "detected": "361/368",
+  "recognised": "333/368",
+  "recall": 0.905,
+  "wrongFounder": 0,
+  "falseAccept": "0/500"
+ }
+]

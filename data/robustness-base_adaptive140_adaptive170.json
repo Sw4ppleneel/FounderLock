@@ -1,0 +1,272 @@
+[
+ {
+  "condition": "clean",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "118/120",
+  "recall": 0.983,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "clean",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "117/120",
+  "recall": 0.975,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "clean",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "117/120",
+  "recall": 0.975,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "harsh sun / overexposed",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "113/120",
+  "recall": 0.942,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "harsh sun / overexposed",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "112/120",
+  "recall": 0.933,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "harsh sun / overexposed",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "112/120",
+  "recall": 0.933,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "backlit (sun behind)",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "115/120",
+  "recall": 0.958,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "backlit (sun behind)",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "115/120",
+  "recall": 0.958,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "backlit (sun behind)",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "114/120",
+  "recall": 0.95,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "dust haze",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "113/120",
+  "recall": 0.942,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "dust haze",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "116/120",
+  "recall": 0.967,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "dust haze",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "115/120",
+  "recall": 0.958,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "heavy dust haze",
+  "variant": "base",
+  "detected": "118/120",
+  "recognised": "101/120",
+  "recall": 0.842,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "heavy dust haze",
+  "variant": "adaptive<140",
+  "detected": "118/120",
+  "recognised": "106/120",
+  "recall": 0.883,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "heavy dust haze",
+  "variant": "adaptive<170",
+  "detected": "118/120",
+  "recognised": "108/120",
+  "recall": 0.9,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "hard side shadow",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "116/120",
+  "recall": 0.967,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "hard side shadow",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "116/120",
+  "recall": 0.967,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "hard side shadow",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "116/120",
+  "recall": 0.967,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "warm golden-hour cast",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "118/120",
+  "recall": 0.983,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "warm golden-hour cast",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "117/120",
+  "recall": 0.975,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "warm golden-hour cast",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "116/120",
+  "recall": 0.967,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "low light + noise",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "112/120",
+  "recall": 0.933,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "low light + noise",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "108/120",
+  "recall": 0.9,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "low light + noise",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "109/120",
+  "recall": 0.908,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "motion blur",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "104/120",
+  "recall": 0.867,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "motion blur",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "102/120",
+  "recall": 0.85,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "motion blur",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "103/120",
+  "recall": 0.858,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "dusty noon (haze+glare+shadow)",
+  "variant": "base",
+  "detected": "119/120",
+  "recognised": "116/120",
+  "recall": 0.967,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "dusty noon (haze+glare+shadow)",
+  "variant": "adaptive<140",
+  "detected": "119/120",
+  "recognised": "115/120",
+  "recall": 0.958,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ },
+ {
+  "condition": "dusty noon (haze+glare+shadow)",
+  "variant": "adaptive<170",
+  "detected": "119/120",
+  "recognised": "115/120",
+  "recall": 0.958,
+  "wrongFounder": 0,
+  "falseAccept": "0/120"
+ }
+]
